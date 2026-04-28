@@ -2156,6 +2156,12 @@ export default function App() {
     setActiveRouteId(null);
     setCurrentScreen('home');
 
+    // Warm up the backend in case Render is cold-starting
+    const backendBase = window.location.hostname === 'localhost' 
+      ? 'http://localhost:5000' 
+      : 'https://routecopilot-backend.onrender.com';
+    try { await fetch(`${backendBase}/health`, { mode: 'cors' }); } catch(e) { /* ignore warmup failure */ }
+
     try {
       const response = await apiClient.post('/routes/calculate', {
         origin: formData.startPoint,
@@ -2222,7 +2228,22 @@ export default function App() {
       }
     } catch (error) {
       console.error("AI Engine Error:", error);
-      alert('AI Engine failed to geocode or calculate. Please try another destination.');
+      
+      // Provide specific, actionable error messages
+      let errorMsg = 'AI Engine failed to calculate route. ';
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMsg += 'The server took too long to respond. It may be waking up — please try again in 30 seconds.';
+      } else if (error.code === 'ERR_NETWORK' || !error.response) {
+        errorMsg += 'Could not reach the server. Please check your internet connection and try again.';
+      } else if (error.response?.status === 429) {
+        errorMsg += 'Too many requests. Please wait a moment and try again.';
+      } else if (error.response?.data?.error?.message) {
+        errorMsg += error.response.data.error.message;
+      } else {
+        errorMsg += 'Please try again or use a different origin/destination.';
+      }
+      
+      alert(errorMsg);
       setCurrentScreen('plan');
     } finally {
       setIsCalculating(false);
