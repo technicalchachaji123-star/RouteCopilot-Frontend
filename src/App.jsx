@@ -1039,7 +1039,7 @@ function FullScreenNavMap({ route, isDark, onClose }) {
 }
 
 // Home Screen Component
-function HomeScreen({ isDark, telemetry, route, isCalculating, onShowFuel, onShowRest }) {
+function HomeScreen({ isDark, telemetry, route, isCalculating, onShowFuel, onShowRest, reminders = [], onSetReminder }) {
   const riskScore = route ? route.risk : 0;
   const activeAlerts = route && route.alerts ? route.alerts : [];
   const [selectedAlert, setSelectedAlert] = useState(null);
@@ -1221,7 +1221,7 @@ function HomeScreen({ isDark, telemetry, route, isCalculating, onShowFuel, onSho
                 <button className="btn btn-secondary" onClick={() => setSelectedAlert(null)} style={{ flex: 1 }}>
                   Cancel
                 </button>
-                <button className="btn btn-primary" onClick={() => handleSetReminder(selectedAlert)} style={{ flex: 1 }}>
+                <button className="btn btn-primary" onClick={() => onSetReminder(selectedAlert)} style={{ flex: 1 }}>
                   🔔 Set Reminder
                 </button>
               </div>
@@ -1583,7 +1583,14 @@ function RouteScreen({ isDark, activeFilters, setActiveFilters, routes, setActiv
             <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10 }}>
               <button onClick={() => setShowRouteMap(false)} style={{ width: '40px', height: '40px', borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.5)', color: 'white', cursor: 'pointer', fontSize: '24px' }}>×</button>
             </div>
-            <InteractiveMap origin={selectedRoute.originCoord} dest={selectedRoute.destCoord} isDark={isDark} />
+            <InteractiveMap 
+              origin={selectedRoute.originCoord} 
+              dest={selectedRoute.destCoord} 
+              waypointCoords={selectedRoute.waypointCoords}
+              routeGeometry={selectedRoute.routeGeometry}
+              tolls={selectedRoute.tolls}
+              isDark={isDark} 
+            />
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '20px', color: 'white' }}>
               <h3 style={{ margin: 0, fontFamily: 'var(--font-display)' }}>{selectedRoute.name}</h3>
               <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '14px', opacity: 0.8 }}>
@@ -2050,6 +2057,7 @@ export default function App() {
   const [planDest, setPlanDest] = useState('');
   const [globalFuelModal, setGlobalFuelModal] = useState(false);
   const [globalRestModal, setGlobalRestModal] = useState(false);
+  const [reminders, setReminders] = useState([]);
 
   // Load state from localStorage on mount
   useEffect(() => {
@@ -2120,6 +2128,10 @@ export default function App() {
     setIsCalculating(true);
     setPlanOrigin(formData.startPoint.split(',')[0].trim());
     setPlanDest(formData.endPoint.split(',')[0].trim());
+    
+    // Clear old state to prevent 'flicker' with old data
+    setCalculatedRoutes([]);
+    setActiveRouteId(null);
     setCurrentScreen('home');
 
     try {
@@ -2137,8 +2149,9 @@ export default function App() {
         const mappedRoutes = apiData.map((r) => {
           const distKm = r.distanceKm || 0;
           const durMins = r.durationMins || 0;
-          const fuelStopCount = Math.max(1, Math.floor(distKm / 250)); // 1 fuel stop per 250 km
-          const restStopCount = Math.max(1, Math.floor(durMins / 180)); // 1 rest stop per 3 hrs
+          const fuelStopCount = Math.max(1, Math.floor(distKm / 250)); 
+          const restStopCount = Math.max(1, Math.floor(durMins / 180)); 
+          
           return {
             id: r.id,
             name: r.name,
@@ -2160,16 +2173,22 @@ export default function App() {
             tolls: r.tolls || [],
             alerts: r.alerts || [],
             highwaySequence: r.highwaySequence || [],
-            fuelStations: (r.fuelStations || []).map((s, i) => ({
-              name: s,
-              distance: `${(i + 1) * 45}km from origin`,
-              area: r.name.split(' ')[0] + ' Highway'
-            })),
-            restStopsList: (r.restStopsList || []).map((s, i) => ({
-              name: s,
-              distance: `${(i + 1) * 60}km from origin`,
-              area: r.name.split(' ')[0] + ' Sector'
-            }))
+            fuelStations: (r.fuelStations || []).map((s, i) => {
+              const count = r.fuelStations?.length || 1;
+              return {
+                name: s,
+                distance: `${Math.round(distKm * ((i+1)/(count+1)))} km from start`,
+                area: r.name.split(' ')[0] + ' Corridor'
+              };
+            }),
+            restStopsList: (r.restStopsList || []).map((s, i) => {
+              const count = r.restStopsList?.length || 1;
+              return {
+                name: s,
+                distance: `${Math.round(distKm * ((i+1)/(count+1)))} km from start`,
+                area: r.name.split('(')[0].trim()
+              };
+            })
           };
         });
         setCalculatedRoutes(mappedRoutes);
@@ -2179,9 +2198,17 @@ export default function App() {
       }
     } catch (error) {
       console.error("AI Engine Error:", error);
-      alert('Route calculation failed. Check backend is running.');
+      alert('AI Engine failed to geocode or calculate. Please try another destination.');
+      setCurrentScreen('plan');
     } finally {
       setIsCalculating(false);
+    }
+  };
+
+  const handleSetReminder = (alert) => {
+    if (!reminders.some(r => r.id === alert.id)) {
+      setReminders([...reminders, alert]);
+      alert(`Reminder set for: ${alert.text || alert.message}`);
     }
   };
 
@@ -2239,6 +2266,8 @@ export default function App() {
             telemetry={telemetry} 
             route={activeRoute} 
             isCalculating={isCalculating} 
+            reminders={reminders}
+            onSetReminder={handleSetReminder}
             onShowFuel={() => setGlobalFuelModal(true)}
             onShowRest={() => setGlobalRestModal(true)}
           />
