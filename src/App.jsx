@@ -2132,6 +2132,25 @@ export default function App() {
     setPlanOrigin(formData.startPoint.split(',')[0].trim());
     setPlanDest(formData.endPoint.split(',')[0].trim());
     
+    // Defensive check: If user typed but didn't select, try to geocode in browser
+    let finalStartCoord = formData.startCoord;
+    let finalEndCoord = formData.endCoord;
+
+    try {
+      if (!finalStartCoord) {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.startPoint)}&limit=1`);
+        const data = await res.json();
+        if (data && data.length > 0) finalStartCoord = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      }
+      if (!finalEndCoord) {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.endPoint)}&limit=1`);
+        const data = await res.json();
+        if (data && data.length > 0) finalEndCoord = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      }
+    } catch (e) {
+      console.warn("Client-side geocoding failed, trying backend fallback...");
+    }
+
     // Clear old state to prevent 'flicker' with old data
     setCalculatedRoutes([]);
     setActiveRouteId(null);
@@ -2141,8 +2160,8 @@ export default function App() {
       const response = await apiClient.post('/routes/calculate', {
         origin: formData.startPoint,
         destination: formData.endPoint,
-        originCoord: formData.startCoord,
-        destCoord: formData.endCoord,
+        originCoord: finalStartCoord,
+        destCoord: finalEndCoord,
         waypoints: formData.waypoints || [],
         cargoTypes: formData.cargoTypes,
         truckType: formData.vehicleType,
