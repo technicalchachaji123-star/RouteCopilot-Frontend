@@ -2132,37 +2132,37 @@ export default function App() {
     setPlanOrigin(formData.startPoint.split(',')[0].trim());
     setPlanDest(formData.endPoint.split(',')[0].trim());
     
-    // Defensive check: If user typed but didn't select, try to geocode in browser
-    let finalStartCoord = formData.startCoord;
-    let finalEndCoord = formData.endCoord;
-
-    try {
-      if (!finalStartCoord) {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.startPoint)}&limit=1`);
-        const data = await res.json();
-        if (data && data.length > 0) finalStartCoord = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-      }
-      if (!finalEndCoord) {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.endPoint)}&limit=1`);
-        const data = await res.json();
-        if (data && data.length > 0) finalEndCoord = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-      }
-    } catch (e) {
-      console.warn("Client-side geocoding failed, trying backend fallback...");
-    }
-
     // Clear old state to prevent 'flicker' with old data
     setCalculatedRoutes([]);
     setActiveRouteId(null);
     setCurrentScreen('home');
 
-    // Warm up the backend in case Render is cold-starting
-    const backendBase = window.location.hostname === 'localhost' 
-      ? 'http://localhost:5000' 
-      : 'https://routecopilot-backend.onrender.com';
-    try { await fetch(`${backendBase}/health`, { mode: 'cors' }); } catch(e) { /* ignore warmup failure */ }
-
     try {
+      // 1. Safety Timeout for Browser-side Geocoding & Warmup
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s safety cap
+
+      // Attempt to geocode in browser only if coordinates are missing
+      let finalStartCoord = formData.startCoord;
+      let finalEndCoord = formData.endCoord;
+
+      try {
+        if (!finalStartCoord) {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.startPoint)}&limit=1`, { signal: controller.signal });
+          const data = await res.json();
+          if (data && data.length > 0) finalStartCoord = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        }
+        if (!finalEndCoord) {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.endPoint)}&limit=1`, { signal: controller.signal });
+          const data = await res.json();
+          if (data && data.length > 0) finalEndCoord = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        }
+      } catch (e) {
+        console.warn("Client-side geocoding timed out or failed, let backend handle it.");
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
       const response = await apiClient.post('/routes/calculate', {
         origin: formData.startPoint,
         destination: formData.endPoint,
