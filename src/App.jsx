@@ -1051,10 +1051,26 @@ function HomeScreen({ isDark, telemetry, route, isCalculating, onShowFuel, onSho
 
   if (isCalculating) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px', padding: '24px' }}>
         <div style={{ fontSize: '48px', animation: 'pulse 1.5s infinite' }}>🧠</div>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--text)' }}>Calculating Best Routes...</h2>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--text)', textAlign: 'center' }}>Calculating Best Routes...</h2>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', textAlign: 'center', maxWidth: '300px' }}>AI is geocoding your locations and finding real driving routes via OSRM</p>
+        
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{ 
+            marginTop: '20px', 
+            padding: '10px 20px', 
+            background: 'transparent', 
+            border: '1px solid var(--border)', 
+            borderRadius: '12px', 
+            color: 'var(--text-secondary)',
+            fontSize: '13px',
+            cursor: 'pointer'
+          }}
+        >
+          Taking too long? Tap to reset
+        </button>
       </div>
     );
   }
