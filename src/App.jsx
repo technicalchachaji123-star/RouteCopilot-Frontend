@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from './api/client';
 import { io } from 'socket.io-client';
 
-const socket = io('https://routecopilot-backend.onrender.com');
+const socket = io(window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://routecopilot-backend.onrender.com');
 // Mock Data
 const mockRoutes = [
   {
@@ -309,6 +309,8 @@ function PlanScreen({ onPlanRoute, isDark }) {
   const [formData, setFormData] = useState({
     startPoint: '',
     endPoint: '',
+    startCoord: null,
+    endCoord: null,
     vehicleType: 'LCV',
     cargoTypes: ['General Cargo']
   });
@@ -345,7 +347,7 @@ function PlanScreen({ onPlanRoute, isDark }) {
             const data = await res.json();
             const address = data.display_name?.split(',').slice(0, 3).join(',') || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
             setPickerAddress(address);
-            pickerAddressRef.current = address;
+            pickerAddressRef.current = { address, lat: center.lat, lon: center.lng };
           } catch (err) {
             setPickerAddress('Failed to fetch address');
           }
@@ -360,14 +362,14 @@ function PlanScreen({ onPlanRoute, isDark }) {
   }, [showMapPicker, mapScriptLoaded]);
 
   const confirmMapSelection = () => {
-    const addr = pickerAddressRef.current;
+    const { address, lat, lon } = pickerAddressRef.current;
     if (showMapPicker === 'start') {
-      setFormData(prev => ({ ...prev, startPoint: addr }));
+      setFormData(prev => ({ ...prev, startPoint: address, startCoord: { lat, lon } }));
     } else if (showMapPicker === 'end') {
-      setFormData(prev => ({ ...prev, endPoint: addr }));
+      setFormData(prev => ({ ...prev, endPoint: address, endCoord: { lat, lon } }));
     } else if (showMapPicker.startsWith('waypoint-')) {
       const wpId = parseInt(showMapPicker.split('-')[1]);
-      setWaypoints(prev => prev.map(wp => wp.id === wpId ? { ...wp, value: addr } : wp));
+      setWaypoints(prev => prev.map(wp => wp.id === wpId ? { ...wp, value: address } : wp));
     }
     setShowMapPicker(null);
   };
@@ -410,10 +412,11 @@ function PlanScreen({ onPlanRoute, isDark }) {
 
   const handleSelectLocation = (loc, type) => {
     const address = loc.display_name.split(',').slice(0, 3).join(',');
+    const coord = { lat: parseFloat(loc.lat), lon: parseFloat(loc.lon) };
     if (type === 'start') {
-      setFormData(prev => ({ ...prev, startPoint: address }));
+      setFormData(prev => ({ ...prev, startPoint: address, startCoord: coord }));
     } else {
-      setFormData(prev => ({ ...prev, endPoint: address }));
+      setFormData(prev => ({ ...prev, endPoint: address, endCoord: coord }));
     }
     setSearchResults(prev => ({ ...prev, [type]: [] }));
   };
@@ -2138,6 +2141,8 @@ export default function App() {
       const response = await apiClient.post('/routes/calculate', {
         origin: formData.startPoint,
         destination: formData.endPoint,
+        originCoord: formData.startCoord,
+        destCoord: formData.endCoord,
         waypoints: formData.waypoints || [],
         cargoTypes: formData.cargoTypes,
         truckType: formData.vehicleType,
